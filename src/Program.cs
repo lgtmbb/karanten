@@ -343,7 +343,7 @@ namespace Karanten
     {
         ListView list;
         TextBox status;
-        Button btnRestore, btnDetails, btnRefresh, btnRaw, btnOpen, btnExit;
+        Button btnRestore, btnDetails, btnRefresh, btnRaw, btnOpen, btnHelp, btnExit;
         string startupReport;
         string lastRaw = "";
         string mpcmd;
@@ -405,15 +405,16 @@ namespace Karanten
             btnRefresh = MakeButton("&Frissítés", 5, delegate { RefreshList(); });
             btnRaw = MakeButton("&Nyers kimenet", 6, delegate { ShowText("Nyers kimenet", lastRaw); });
             btnOpen = MakeButton("&Mappa megnyitása", 7, delegate { OpenFolder(); });
-            btnExit = MakeButton("&Kilépés", 8, delegate { Close(); });
-            Button[] all = new Button[] { btnRestore, btnDetails, btnRefresh, btnRaw, btnOpen, btnExit };
+            btnHelp = MakeButton("&Súgó (F1)", 8, delegate { ShowHelp(); });
+            btnExit = MakeButton("&Kilépés", 9, delegate { Close(); });
+            Button[] all = new Button[] { btnRestore, btnDetails, btnRefresh, btnRaw, btnOpen, btnHelp, btnExit };
             foreach (Button bt in all) { bt.AutoSize = false; bt.Size = new Size(170, 32); }
             buttons.Controls.AddRange(all);
 
             Label l2 = new Label();
             l2.Text = "Á&llapot:";
             l2.AutoSize = true;
-            l2.TabIndex = 9;
+            l2.TabIndex = 10;
             l2.Margin = new Padding(0, 8, 0, 4);
 
             status = new TextBox();
@@ -422,7 +423,7 @@ namespace Karanten
             status.ScrollBars = ScrollBars.Vertical;
             status.Height = 70;
             status.Dock = DockStyle.Fill;
-            status.TabIndex = 10;
+            status.TabIndex = 11;
             status.AccessibleName = "Állapot";
 
             t.Controls.Add(l1, 0, 0);
@@ -436,6 +437,8 @@ namespace Karanten
 
             AcceptButton = null;
             CancelButton = btnExit;
+            KeyPreview = true;
+            KeyDown += delegate(object sender, KeyEventArgs e) { if (e.KeyCode == Keys.F1) { e.Handled = true; ShowHelp(); } };
             Shown += delegate { OnFirstShown(); };
         }
 
@@ -525,6 +528,49 @@ namespace Karanten
                 Cursor = Cursors.Default;
             }
             list.Focus();
+        }
+
+        const string HelpText =
+"KARANTÉN KEZELŐ - SÚGÓ\n" +
+"\n" +
+"Mire való\n" +
+"A program a Microsoft Defender karanténjában lévő fájlokat listázza, megmutatja a részleteiket, és a karanten nevű mappába visszaállítja őket.\n" +
+"\n" +
+"Billentyűk\n" +
+"F1: ez a súgó.\n" +
+"Tab / Shift+Tab: lépés a lista, a gombok és az állapot mező között.\n" +
+"Fel és Le nyíl: lépés a lista elemei között. Ctrl+Space vagy Shift+nyilak: több elem kijelölése.\n" +
+"Enter a listán: részletek.\n" +
+"Escape: kilépés a főablakból; a súgó és a részletek ablakot bezárja.\n" +
+"Alt + a gombok aláhúzott betűje: a gomb közvetlen elérése.\n" +
+"\n" +
+"A lista\n" +
+"Négy oszlopa van: fájlnév, eredeti hely, vírus / fenyegetés neve, karanténba helyezés ideje. Egyszerre több elem is kijelölhető.\n" +
+"\n" +
+"Gombok, a lista mellett, Tab sorrendben\n" +
+"Visszaállítás (Alt+V): a kijelölt elemeket a felhasználói mappában lévő karanten mappába állítja vissza. Előtte megerősítést kér. Utána újraolvassa a listát, és elemenként megmondja, sikerült-e.\n" +
+"Részletek (Alt+R): külön ablakban, olvasható szövegmezőben mutatja a fájlnevet, az eredeti helyet, a teljes útvonalat, a vírus nevét és típusát, a Defender szerinti kategóriát és súlyosságot, hogy aktív-e, lefutott-e a fájl, és mikor került karanténba. Az ablakot a Bezárás gomb vagy az Escape zárja be.\n" +
+"Frissítés (Alt+F): újraolvassa a karantén tartalmát.\n" +
+"Nyers kimenet (Alt+N): megmutatja a Defender listázó parancsának változtatás nélküli kimenetét. Ha a lista üres, de a karanténban van fájl, itt látszik, mit adott vissza a Defender.\n" +
+"Mappa megnyitása (Alt+M): megnyitja a karanten mappát a Fájlkezelőben.\n" +
+"Súgó (Alt+S): ez az ablak.\n" +
+"Kilépés (Alt+K): bezárja a programot.\n" +
+"\n" +
+"Állapot mező\n" +
+"A lista alatt található, csak olvasható. Az utolsó művelet eredményét írja ki: hány elem van karanténban, mi sikerült a visszaállításból, mi történt induláskor.\n" +
+"\n" +
+"Mappák és kivételek\n" +
+"Minden induláskor a program megnézi, hogy a felhasználói mappában megvan-e a karanten és a karanten2 mappa. Ha mindkettő megvan, semmit nem csinál. Ha valamelyik hiányzik, létrehozza, és a hiányzó mappát meg a programot felveszi a Defender kivételei közé. A karanten2 mappa üres marad. A Visszaállítás és a Mappa megnyitása is újra létrehozza a karanten mappát, ha közben letörölték.\n" +
+"\n" +
+"Jogosultság\n" +
+"A program rendszergazdai jogot kér (UAC ablak). Enélkül sem a kivételek felvétele, sem a visszaállítás nem működik.\n" +
+"\n" +
+"Korlátok\n" +
+"A karantén listázását és a visszaállítást a Microsoft csak a Defender saját MpCmdRun.exe programjával teszi lehetővé, ezért a program ezt indítja háttérben, ablak nélkül. Ha a Defender Tamper Protection funkciója be van kapcsolva, a kivételek felvétele sikertelen lehet; ezt az induláskor kiírt üzenet jelzi.\n";
+
+        void ShowHelp()
+        {
+            ShowText("Súgó", HelpText);
         }
 
         void ShowDetails()
