@@ -136,9 +136,10 @@ namespace Karanten
             }
         }
 
-        // A legfrissebb Defender platform MpCmdRun.exe-je, ennek hiányában a Program Files-os.
-        public static string FindMpCmdRun()
+        // Az összes MpCmdRun.exe, a legfrissebb platform elől; almappákban (pl. X64) is keres.
+        public static List<string> FindAllMpCmdRun()
         {
+            List<string> result = new List<string>();
             try
             {
                 string platform = Path.Combine(
@@ -146,19 +147,27 @@ namespace Karanten
                     @"Microsoft\Windows Defender\Platform");
                 if (Directory.Exists(platform))
                 {
-                    string best = null;
-                    Version bestVer = null;
+                    List<KeyValuePair<Version, string>> dirs = new List<KeyValuePair<Version, string>>();
                     foreach (string dir in Directory.GetDirectories(platform))
                     {
                         string name = Path.GetFileName(dir);
                         int dash = name.IndexOf('-');
                         if (dash > 0) name = name.Substring(0, dash);
                         Version v;
-                        if (!Version.TryParse(name, out v)) continue;
-                        if (!File.Exists(Path.Combine(dir, "MpCmdRun.exe"))) continue;
-                        if (bestVer == null || v > bestVer) { bestVer = v; best = dir; }
+                        if (Version.TryParse(name, out v)) dirs.Add(new KeyValuePair<Version, string>(v, dir));
                     }
-                    if (best != null) return Path.Combine(best, "MpCmdRun.exe");
+                    dirs.Sort(delegate(KeyValuePair<Version, string> x, KeyValuePair<Version, string> y) { return y.Key.CompareTo(x.Key); });
+                    foreach (KeyValuePair<Version, string> d in dirs)
+                    {
+                        string direct = Path.Combine(d.Value, "MpCmdRun.exe");
+                        if (File.Exists(direct)) result.Add(direct);
+                        else
+                        {
+                            foreach (string f in Directory.GetFiles(d.Value, "MpCmdRun.exe", SearchOption.AllDirectories))
+                                result.Add(f);
+                        }
+                        if (result.Count >= 2) break;
+                    }
                 }
             }
             catch (Exception) { }
@@ -166,7 +175,8 @@ namespace Karanten
             string pf = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
                 @"Windows Defender\MpCmdRun.exe");
-            return File.Exists(pf) ? pf : null;
+            if (File.Exists(pf) && !result.Contains(pf)) result.Add(pf);
+            return result;
         }
     }
 
@@ -254,6 +264,7 @@ namespace Karanten
         public string Threat = "";
         public string Path = "";
         public string Time = "";
+        public string Source = "quarantine";
 
         public string FileName { get { return System.IO.Path.GetFileName(Path); } }
         public string Dir
@@ -269,31 +280,44 @@ namespace Karanten
 
     static class Quarantine
     {
-        static readonly Regex FileLine = new Regex(@"^\s*(file|containerfile)\s*:\s*(.+?)\s*$", RegexOptions.IgnoreCase);
+        static readonly Regex PathStart = new Regex(@"(?:[A-Za-z]:\\|\\\\)", RegexOptions.None);
+        static readonly Regex TimeStart = new Regex(@"\d{4}[./\-]\s?\d{1,2}[./\-]\s?\d{1,2}|\d{1,2}[./\-]\d{1,2}[./\-]\d{4}", RegexOptions.None);
 
+        // Tűrő értelmezés: a címkék (ThreatName, file:, quarantined at) lehetnek lefordítva.
+        // Fenyegetés-sor: van benne '=' és nincs benne meghajtóútvonal. Fájl-sor: van benne meghajtóútvonal.
         public static List<QItem> Parse(string output)
         {
             List<QItem> list = new List<QItem>();
             string threat = "";
             foreach (string raw in output.Split(new char[] { '\n' }))
             {
-                string line = raw.TrimEnd('\r');
-                string t = line.Trim();
-                if (t.StartsWith("ThreatName", StringComparison.OrdinalIgnoreCase))
+                string line = raw.TrimEnd('\r').Trim();
+                if (line.Length == 0) continue;
+                Match pm = PathStart.Match(line);
+                if (!pm.Success)
                 {
-                    int eq = t.IndexOf('=');
-                    threat = eq >= 0 ? t.Substring(eq + 1).Trim() : "";
+                    int eq = line.IndexOf('=');
+                    if (eq > 0 && eq < line.Length - 1) threat = line.Substring(eq + 1).Trim();
                     continue;
                 }
-                Match m = FileLine.Match(line);
-                if (!m.Success) continue;
-                string rest = m.Groups[2].Value;
+                string label = line.Substring(0, pm.Index);
+                if (label.ToLowerInvariant().Contains("regkey")) continue;
+                string rest = line.Substring(pm.Index);
                 string time = "";
-                int q = rest.IndexOf(" quarantined at ", StringComparison.OrdinalIgnoreCase);
-                if (q >= 0)
+                Match tm = TimeStart.Match(rest);
+                if (tm.Success)
                 {
-                    time = rest.Substring(q + " quarantined at ".Length).Trim();
-                    rest = rest.Substring(0, q).Trim();
+                    time = rest.Substring(tm.Index).Trim();
+                    rest = rest.Substring(0, tm.Index).TrimEnd();
+                    // lemarad a "quarantined at" jellegű záró szavak (legfeljebb 5), amíg nem útvonalrész
+                    for (int i = 0; i < 5; i++)
+                    {
+                        int sp = rest.LastIndexOf(' ');
+                        if (sp < 0) break;
+                        string word = rest.Substring(sp + 1);
+                        if (word.IndexOf('\\') >= 0 || word.IndexOf('.') >= 0) break;
+                        rest = rest.Substring(0, sp).TrimEnd();
+                    }
                 }
                 QItem it = new QItem();
                 it.Threat = threat;
@@ -301,6 +325,52 @@ namespace Karanten
                 it.Time = time;
                 list.Add(it);
             }
+            return list;
+        }
+
+        // Tartalék: a Defender védelmi előzményei (WMI: MSFT_MpThreatDetection + MSFT_MpThreat).
+        public static List<QItem> FromHistory(out string note)
+        {
+            List<QItem> list = new List<QItem>();
+            note = "";
+            try
+            {
+                Dictionary<long, string> names = new Dictionary<long, string>();
+                using (ManagementObjectSearcher s = new ManagementObjectSearcher(
+                    @"root\Microsoft\Windows\Defender", "SELECT ThreatID, ThreatName FROM MSFT_MpThreat"))
+                {
+                    foreach (ManagementBaseObject o in s.Get())
+                        names[Convert.ToInt64(o["ThreatID"])] = Convert.ToString(o["ThreatName"]);
+                }
+                using (ManagementObjectSearcher s = new ManagementObjectSearcher(
+                    @"root\Microsoft\Windows\Defender", "SELECT ThreatID, Resources, InitialDetectionTime FROM MSFT_MpThreatDetection"))
+                {
+                    foreach (ManagementBaseObject o in s.Get())
+                    {
+                        long id = Convert.ToInt64(o["ThreatID"]);
+                        string name;
+                        if (!names.TryGetValue(id, out name)) name = "ThreatID " + id;
+                        string time = "";
+                        try { time = ManagementDateTimeConverter.ToDateTime(Convert.ToString(o["InitialDetectionTime"])).ToString("yyyy-MM-dd HH:mm:ss"); }
+                        catch (Exception) { }
+                        string[] res = o["Resources"] as string[];
+                        if (res == null) continue;
+                        foreach (string r in res)
+                        {
+                            Match pm = PathStart.Match(r);
+                            if (!pm.Success) continue;
+                            if (r.ToLowerInvariant().StartsWith("regkey")) continue;
+                            QItem it = new QItem();
+                            it.Threat = name;
+                            it.Path = r.Substring(pm.Index);
+                            it.Time = time;
+                            it.Source = "history";
+                            list.Add(it);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex) { note = "Védelmi előzmények (WMI) hiba: " + ex.Message; }
             return list;
         }
     }
@@ -373,11 +443,13 @@ namespace Karanten
         bool isAdmin;
         string lastRaw = "";
         string mpcmd;
+        List<string> candidates;
 
         public MainForm(bool admin)
         {
             isAdmin = admin;
-            mpcmd = Proc.FindMpCmdRun();
+            candidates = Proc.FindAllMpCmdRun();
+            mpcmd = candidates.Count > 0 ? candidates[0] : null;
 
             Text = "Karantén kezelő";
             StartPosition = FormStartPosition.CenterScreen;
@@ -503,6 +575,15 @@ namespace Karanten
             list.Focus();
         }
 
+        static string FirstLines(string s, int n)
+        {
+            string[] ls = s.Replace("\r", "").Split('\n');
+            StringBuilder sb = new StringBuilder();
+            int c = 0;
+            foreach (string l in ls) { if (l.Trim().Length == 0) continue; sb.AppendLine(l); if (++c >= n) break; }
+            return sb.ToString();
+        }
+
         void SetStatus(string s)
         {
             status.Text = s.Replace("\r\n", "\n").Replace("\n", "\r\n");
@@ -517,14 +598,30 @@ namespace Karanten
 
         List<QItem> LoadItems()
         {
-            if (mpcmd == null)
+            StringBuilder raw = new StringBuilder();
+            List<QItem> items = new List<QItem>();
+            if (candidates.Count == 0)
             {
-                lastRaw = "Az MpCmdRun.exe nem található. A Microsoft Defender nincs telepítve vagy le van tiltva.";
-                return new List<QItem>();
+                raw.AppendLine("Az MpCmdRun.exe nem található. A Microsoft Defender nincs telepítve vagy le van tiltva.");
             }
-            ProcResult r = Proc.Run(mpcmd, "-Restore -ListAll");
-            lastRaw = r.Output;
-            return Quarantine.Parse(r.Output);
+            foreach (string exe in candidates)
+            {
+                ProcResult r = Proc.Run(exe, "-Restore -ListAll");
+                raw.AppendLine("== " + exe + " (kilépési kód: " + r.Code + ") ==");
+                raw.AppendLine(r.Output);
+                List<QItem> found = Quarantine.Parse(r.Output);
+                if (found.Count > 0) { items = found; mpcmd = exe; break; }
+            }
+            if (items.Count == 0)
+            {
+                string note;
+                List<QItem> hist = Quarantine.FromHistory(out note);
+                raw.AppendLine("== Védelmi előzmények (WMI) ==");
+                raw.AppendLine(note.Length > 0 ? note : (hist.Count + " találat"));
+                items = hist;
+            }
+            lastRaw = raw.ToString();
+            return items;
         }
 
         void Fill(List<QItem> items)
@@ -554,8 +651,8 @@ namespace Karanten
                 List<QItem> items = LoadItems();
                 Fill(items);
                 string msg;
-                if (mpcmd == null) msg = lastRaw;
-                else if (items.Count == 0) msg = "Nincs karanténban lévő elem.";
+                if (candidates.Count == 0) msg = lastRaw;
+                else if (items.Count == 0) msg = "Nincs karanténban lévő elem. A Nyers kimenet gomb megmutatja, mit adott vissza a Defender.\r\n" + FirstLines(lastRaw, 6);
                 else msg = items.Count + " elem van karanténban.";
                 SetStatus(msg);
             }
@@ -667,7 +764,8 @@ namespace Karanten
                 int ok = 0;
                 foreach (QItem it in chosen)
                 {
-                    if (still.Contains(it.Key)) sum.AppendLine("Sikertelen: " + it.FileName);
+                    bool restored = File.Exists(System.IO.Path.Combine(dest, it.FileName)) || (it.Source == "quarantine" && !still.Contains(it.Key));
+                    if (!restored) sum.AppendLine("Sikertelen: " + it.FileName);
                     else { ok++; sum.AppendLine("Visszaállítva: " + it.FileName); }
                 }
                 string result = ok + " / " + chosen.Count + " elem visszaállítva ide: " + dest + "\r\n" + sum.ToString();

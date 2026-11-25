@@ -1,6 +1,8 @@
 # Karanten.exe changelog
 
 ## Latest
+- Fix: quarantine list was empty; the parser no longer depends on English labels, every MpCmdRun.exe copy is tried, and Defender protection history (WMI) is used as a fallback
+- Restore success is now checked by the file appearing in the karanten folder
 - Quarantine list with the buttons beside it, reachable with Tab: Visszaállítás, Részletek, Frissítés, Nyers kimenet, Mappa megnyitása, Súgó, Kilépés
 - Részletek window: file name, previous location, full path, virus name and type, Defender category and severity, active or not, quarantine time
 - Súgó (F1 or Alt+S): read-only text box describing every function
