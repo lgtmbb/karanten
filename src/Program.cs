@@ -18,34 +18,59 @@ namespace Karanten
     static class Program
     {
         [STAThread]
-        static void Main()
+        static void Main(string[] args)
         {
-#if NET5_0_OR_GREATER
-            Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
-#endif
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
-
-            if (!IsAdmin())
+            try
             {
-                // A kivételek felvételéhez és a visszaállításhoz rendszergazdai jog kell.
-                try
-                {
-                    ProcessStartInfo psi = new ProcessStartInfo(Application.ExecutablePath);
-                    psi.UseShellExecute = true;
-                    psi.Verb = "runas";
-                    Process.Start(psi);
-                }
-                catch (Win32Exception)
-                {
-                    MessageBox.Show("A program rendszergazdai jogosultság nélkül nem működik. Indítsd újra, és a felugró ablakban engedélyezd.",
-                        "Karantén kezelő", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                }
-                return;
-            }
+#if NET5_0_OR_GREATER
+                Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+#endif
+                Application.EnableVisualStyles();
+                Application.SetCompatibleTextRenderingDefault(false);
+                Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+                Application.ThreadException += delegate(object s, System.Threading.ThreadExceptionEventArgs e) { Fail(e.Exception); };
+                AppDomain.CurrentDomain.UnhandledException += delegate(object s, UnhandledExceptionEventArgs e) { Fail(e.ExceptionObject as Exception); };
 
-            string report = Folders.EnsureAll();
-            Application.Run(new MainForm(report));
+                // Az ablak mindig megnyílik. A rendszergazdai jogot a manifest kéri (UAC);
+                // ha mégsem emelt jogú, egyszer újraindítjuk emelve, utána így is megnyílik az ablak.
+                bool admin = IsAdmin();
+                if (!admin && Array.IndexOf(args, "--emelt") < 0)
+                {
+                    try
+                    {
+                        ProcessStartInfo psi = new ProcessStartInfo(Application.ExecutablePath, "--emelt");
+                        psi.UseShellExecute = true;
+                        psi.Verb = "runas";
+                        Process.Start(psi);
+                        return;
+                    }
+                    catch (Win32Exception) { }
+                }
+
+                Application.Run(new MainForm(admin));
+            }
+            catch (Exception ex)
+            {
+                Fail(ex);
+            }
+        }
+
+        // Hiba esetén naplófájl a felhasználói mappában, és egy ablak, amit a képernyőolvasó felolvas.
+        static void Fail(Exception ex)
+        {
+            string text = ex == null ? "Ismeretlen hiba." : ex.ToString();
+            try
+            {
+                string log = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Karanten-hiba.txt");
+                File.WriteAllText(log, DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "\r\n" + text);
+            }
+            catch (Exception) { }
+            try
+            {
+                MessageBox.Show("A program hibát észlelt. A részletek a felhasználói mappában lévő Karanten-hiba.txt fájlban vannak.\r\n\r\n" + text,
+                    "Karantén kezelő - hiba", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            catch (Exception) { }
         }
 
         static bool IsAdmin()
@@ -344,13 +369,14 @@ namespace Karanten
         ListView list;
         TextBox status;
         Button btnRestore, btnDetails, btnRefresh, btnRaw, btnOpen, btnHelp, btnExit;
-        string startupReport;
+        string startupReport = "";
+        bool isAdmin;
         string lastRaw = "";
         string mpcmd;
 
-        public MainForm(string report)
+        public MainForm(bool admin)
         {
-            startupReport = report;
+            isAdmin = admin;
             mpcmd = Proc.FindMpCmdRun();
 
             Text = "Karantén kezelő";
@@ -455,11 +481,21 @@ namespace Karanten
 
         void OnFirstShown()
         {
+            try
+            {
+                if (isAdmin) startupReport = Folders.EnsureAll();
+                else startupReport = "Nincs rendszergazdai jog: a kivételek felvétele és a visszaállítás nem fog működni. Indítsd újra a programot, és engedélyezd a felugró ablakot.";
+            }
+            catch (Exception ex)
+            {
+                startupReport = "Induláskori hiba: " + ex.Message;
+            }
             if (startupReport.Length > 0)
             {
                 SetStatus(startupReport);
             }
-            RefreshList();
+            try { RefreshList(); }
+            catch (Exception ex) { SetStatus("A lista olvasása sikertelen: " + ex.Message); }
             if (startupReport.Length > 0)
             {
                 MessageBox.Show(this, startupReport, "Mappák és kivételek", MessageBoxButtons.OK, MessageBoxIcon.Information);
