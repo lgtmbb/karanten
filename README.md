@@ -9,6 +9,6 @@ Grafikus, NVDA-val használható Windows program a Microsoft Defender karanténj
 - `karanten2` üres marad
 - Rendszergazdai jog kell, a program UAC-t kér
 
-A kész `Karanten.exe` a GitHub Releases oldalon van (latest), a GitHub Actions építi minden push után. Nincs szükség parancssorra vagy fordítóra.
+A kész `Karanten.exe` a GitHub Releases oldalon lesz, ha a `build-workflow.yml` fájl a `.github/workflows/` mappába kerül (ehhez a tokennek Workflows jogosultság kell). Nincs szükség parancssorra vagy fordítóra.
 
 A karantén listázására és visszaállítására a Microsoft nem ad WMI/COM felületet; ezt a program a Defender saját MpCmdRun.exe-jével végzi háttérben, rejtett ablakkal.

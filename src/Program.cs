@@ -280,6 +280,64 @@ namespace Karanten
         }
     }
 
+    // ---------- Fenyegetés részletei (WMI: root\Microsoft\Windows\Defender, MSFT_MpThreat) ----------
+    class ThreatInfo
+    {
+        public string Category = "";
+        public string Severity = "";
+        public bool IsActive;
+        public bool DidExecute;
+
+        static readonly string[] Sev = { "ismeretlen", "alacsony", "közepes", "magas", "súlyos" };
+        static readonly Dictionary<int, string> Cat = new Dictionary<int, string>
+        {
+            {1,"reklámprogram (adware)"},{2,"kémprogram (spyware)"},{3,"jelszólopó"},{4,"trójai letöltő"},
+            {5,"féreg (worm)"},{6,"hátsó kapu (backdoor)"},{7,"távoli elérésű trójai"},{8,"trójai"},
+            {10,"billentyűzetfigyelő (keylogger)"},{12,"megfigyelő szoftver"},{13,"böngészőmódosító"},
+            {18,"biztonsági beállítást letiltó"},{27,"potenciálisan nemkívánatos szoftver"},
+            {33,"eszköz"},{36,"trójai dropper"},{40,"vírus"},{43,"ismeretlen"},{45,"viselkedés alapú"}
+        };
+
+        public static ThreatInfo Lookup(string threatName)
+        {
+            try
+            {
+                using (ManagementObjectSearcher s = new ManagementObjectSearcher(
+                    @"root\Microsoft\Windows\Defender",
+                    "SELECT ThreatName, SeverityID, CategoryID, IsActive, DidThreatExecute FROM MSFT_MpThreat"))
+                {
+                    foreach (ManagementBaseObject o in s.Get())
+                    {
+                        string n = Convert.ToString(o["ThreatName"]);
+                        if (!string.Equals(n, threatName, StringComparison.OrdinalIgnoreCase)) continue;
+                        ThreatInfo ti = new ThreatInfo();
+                        int sev = Convert.ToInt32(o["SeverityID"]);
+                        int cat = Convert.ToInt32(o["CategoryID"]);
+                        ti.Severity = sev >= 0 && sev < Sev.Length ? Sev[sev] : sev.ToString();
+                        string cs;
+                        ti.Category = Cat.TryGetValue(cat, out cs) ? cs : ("azonosító: " + cat);
+                        ti.IsActive = o["IsActive"] != null && Convert.ToBoolean(o["IsActive"]);
+                        ti.DidExecute = o["DidThreatExecute"] != null && Convert.ToBoolean(o["DidThreatExecute"]);
+                        return ti;
+                    }
+                }
+            }
+            catch (Exception) { }
+            return null;
+        }
+
+        // A Defender-nevek felépítése: Típus:Platform/Család.változat, pl. Trojan:Win32/Wacatac.B!ml
+        public static string TypeFromName(string name)
+        {
+            int c = name.IndexOf(':');
+            int sl = name.IndexOf('/');
+            string type = c > 0 ? name.Substring(0, c) : "";
+            string platform = (c > 0 && sl > c) ? name.Substring(c + 1, sl - c - 1) : "";
+            if (type.Length == 0) return "nem állapítható meg a névből";
+            return platform.Length > 0 ? type + " (platform: " + platform + ")" : type;
+        }
+    }
+
     // ---------- Főablak ----------
     class MainForm : Form
     {
@@ -302,11 +360,12 @@ namespace Karanten
 
             TableLayoutPanel t = new TableLayoutPanel();
             t.Dock = DockStyle.Fill;
-            t.ColumnCount = 1;
-            t.RowCount = 5;
+            t.ColumnCount = 2;
+            t.RowCount = 4;
+            t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            t.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             t.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             t.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            t.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             t.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             t.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             t.Padding = new Padding(8);
@@ -326,24 +385,30 @@ namespace Karanten
             list.Dock = DockStyle.Fill;
             list.TabIndex = 1;
             list.AccessibleName = "Karanténban lévő fájlok";
-            list.Columns.Add("Fájlnév", 200);
-            list.Columns.Add("Eredeti hely", 360);
-            list.Columns.Add("Vírus / fenyegetés", 220);
-            list.Columns.Add("Karanténba helyezve", 160);
+            list.Columns.Add("Fájlnév", 180);
+            list.Columns.Add("Eredeti hely", 340);
+            list.Columns.Add("Vírus / fenyegetés", 200);
+            list.Columns.Add("Karanténba helyezve", 150);
             list.ItemActivate += delegate { ShowDetails(); };
             list.SelectedIndexChanged += delegate { UpdateButtons(); };
 
+            // A gombok a lista mellett, jobbra; Tab-bal a listából egyenként elérhetők.
             FlowLayoutPanel buttons = new FlowLayoutPanel();
+            buttons.FlowDirection = FlowDirection.TopDown;
+            buttons.WrapContents = false;
             buttons.AutoSize = true;
-            buttons.Dock = DockStyle.Fill;
+            buttons.Dock = DockStyle.Top;
             buttons.TabIndex = 2;
-            btnRestore = MakeButton("&Visszaállítás a karanten mappába", 3, delegate { RestoreSelected(); });
+            buttons.Margin = new Padding(8, 0, 0, 0);
+            btnRestore = MakeButton("&Visszaállítás", 3, delegate { RestoreSelected(); });
             btnDetails = MakeButton("&Részletek", 4, delegate { ShowDetails(); });
             btnRefresh = MakeButton("&Frissítés", 5, delegate { RefreshList(); });
             btnRaw = MakeButton("&Nyers kimenet", 6, delegate { ShowText("Nyers kimenet", lastRaw); });
             btnOpen = MakeButton("&Mappa megnyitása", 7, delegate { OpenFolder(); });
             btnExit = MakeButton("&Kilépés", 8, delegate { Close(); });
-            buttons.Controls.AddRange(new Control[] { btnRestore, btnDetails, btnRefresh, btnRaw, btnOpen, btnExit });
+            Button[] all = new Button[] { btnRestore, btnDetails, btnRefresh, btnRaw, btnOpen, btnExit };
+            foreach (Button bt in all) { bt.AutoSize = false; bt.Size = new Size(170, 32); }
+            buttons.Controls.AddRange(all);
 
             Label l2 = new Label();
             l2.Text = "Á&llapot:";
@@ -361,10 +426,13 @@ namespace Karanten
             status.AccessibleName = "Állapot";
 
             t.Controls.Add(l1, 0, 0);
+            t.SetColumnSpan(l1, 2);
             t.Controls.Add(list, 0, 1);
-            t.Controls.Add(buttons, 0, 2);
-            t.Controls.Add(l2, 0, 3);
-            t.Controls.Add(status, 0, 4);
+            t.Controls.Add(buttons, 1, 1);
+            t.Controls.Add(l2, 0, 2);
+            t.SetColumnSpan(l2, 2);
+            t.Controls.Add(status, 0, 3);
+            t.SetColumnSpan(status, 2);
 
             AcceptButton = null;
             CancelButton = btnExit;
@@ -463,11 +531,24 @@ namespace Karanten
         {
             if (list.SelectedItems.Count == 0) return;
             QItem it = (QItem)list.SelectedItems[0].Tag;
-            string s = "Fájlnév: " + it.FileName + "\r\n" +
-                       "Eredeti hely: " + it.Dir + "\r\n" +
-                       "Vírus / fenyegetés: " + it.Threat + "\r\n" +
-                       "Karanténba helyezve: " + it.Time;
-            MessageBox.Show(this, s, "Részletek", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            ThreatInfo ti = ThreatInfo.Lookup(it.Threat);
+
+            StringBuilder sb = new StringBuilder();
+            sb.AppendLine("Fájlnév: " + it.FileName);
+            sb.AppendLine("Eredeti hely: " + it.Dir);
+            sb.AppendLine("Teljes eredeti útvonal: " + it.Path);
+            sb.AppendLine("Vírus / fenyegetés neve: " + it.Threat);
+            sb.AppendLine("Vírus típusa: " + ThreatInfo.TypeFromName(it.Threat));
+            if (ti != null)
+            {
+                sb.AppendLine("Kategória (Defender): " + ti.Category);
+                sb.AppendLine("Súlyosság: " + ti.Severity);
+                sb.AppendLine("Aktív: " + (ti.IsActive ? "igen" : "nem"));
+                sb.AppendLine("Lefutott a fájl: " + (ti.DidExecute ? "igen" : "nem"));
+            }
+            sb.AppendLine("Karanténba helyezve: " + it.Time);
+            ShowText("Részletek - " + it.FileName, sb.ToString());
+            list.Focus();
         }
 
         void RestoreSelected()
@@ -539,11 +620,18 @@ namespace Karanten
             tb.ScrollBars = ScrollBars.Both;
             tb.WordWrap = false;
             tb.Dock = DockStyle.Fill;
+            tb.TabIndex = 0;
             tb.AccessibleName = title;
             tb.Text = text.Replace("\r\n", "\n").Replace("\n", "\r\n");
+            Button close = new Button();
+            close.Text = "&Bezárás";
+            close.Dock = DockStyle.Bottom;
+            close.Height = 34;
+            close.TabIndex = 1;
+            close.DialogResult = DialogResult.Cancel;
             f.Controls.Add(tb);
-            f.KeyPreview = true;
-            f.KeyDown += delegate(object s, KeyEventArgs e) { if (e.KeyCode == Keys.Escape) f.Close(); };
+            f.Controls.Add(close);
+            f.CancelButton = close;
             f.Shown += delegate { tb.Focus(); tb.SelectionStart = 0; tb.SelectionLength = 0; };
             f.ShowDialog(this);
         }
