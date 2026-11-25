@@ -15,7 +15,6 @@
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="src\Program.cs" />
     <PackageReference Include="System.Management" Version="8.0.0" />
   </ItemGroup>
 </Project>
