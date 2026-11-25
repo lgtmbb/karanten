@@ -1,0 +1,36 @@
+﻿KARANTÉN KEZELŐ - SÚGÓ
+
+Mire való
+A program a Microsoft Defender karanténjában lévő fájlokat listázza, megmutatja a részleteiket, és a karanten nevű mappába visszaállítja őket.
+
+Billentyűk
+F1: ez a súgó.
+Tab / Shift+Tab: lépés a lista, a gombok és az állapot mező között.
+Fel és Le nyíl: lépés a lista elemei között. Ctrl+Space vagy Shift+nyilak: több elem kijelölése.
+Enter a listán: részletek.
+Escape: kilépés a főablakból; a súgó és a részletek ablakot bezárja.
+Alt + a gombok aláhúzott betűje: a gomb közvetlen elérése.
+
+A lista
+Négy oszlopa van: fájlnév, eredeti hely, vírus / fenyegetés neve, karanténba helyezés ideje. Egyszerre több elem is kijelölhető.
+
+Gombok, a lista mellett, Tab sorrendben
+Visszaállítás (Alt+V): a kijelölt elemeket a felhasználói mappában lévő karanten mappába állítja vissza. Előtte megerősítést kér. Utána újraolvassa a listát, és elemenként megmondja, sikerült-e.
+Részletek (Alt+R): külön ablakban, olvasható szövegmezőben mutatja a fájlnevet, az eredeti helyet, a teljes útvonalat, a vírus nevét és típusát, a Defender szerinti kategóriát és súlyosságot, hogy aktív-e, lefutott-e a fájl, és mikor került karanténba. Az ablakot a Bezárás gomb vagy az Escape zárja be.
+Frissítés (Alt+F): újraolvassa a karantén tartalmát.
+Nyers kimenet (Alt+N): megmutatja a Defender listázó parancsának változtatás nélküli kimenetét. Ha a lista üres, de a karanténban van fájl, itt látszik, mit adott vissza a Defender.
+Mappa megnyitása (Alt+M): megnyitja a karanten mappát a Fájlkezelőben.
+Súgó (Alt+S): ez az ablak.
+Kilépés (Alt+K): bezárja a programot.
+
+Állapot mező
+A lista alatt található, csak olvasható. Az utolsó művelet eredményét írja ki: hány elem van karanténban, mi sikerült a visszaállításból, mi történt induláskor.
+
+Mappák és kivételek
+Minden induláskor a program megnézi, hogy a felhasználói mappában megvan-e a karanten és a karanten2 mappa. Ha mindkettő megvan, semmit nem csinál. Ha valamelyik hiányzik, létrehozza, és a hiányzó mappát meg a programot felveszi a Defender kivételei közé. A karanten2 mappa üres marad. A Visszaállítás és a Mappa megnyitása is újra létrehozza a karanten mappát, ha közben letörölték.
+
+Jogosultság
+A program rendszergazdai jogot kér (UAC ablak). Enélkül sem a kivételek felvétele, sem a visszaállítás nem működik.
+
+Korlátok
+A karantén listázását és a visszaállítást a Microsoft csak a Defender saját MpCmdRun.exe programjával teszi lehetővé, ezért a program ezt indítja háttérben, ablak nélkül. Ha a Defender Tamper Protection funkciója be van kapcsolva, a kivételek felvétele sikertelen lehet; ezt az induláskor kiírt üzenet jelzi.

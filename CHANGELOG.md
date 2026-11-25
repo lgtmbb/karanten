@@ -8,3 +8,4 @@
 - On every start the karanten and karanten2 folders are checked; missing ones are created and added to the Defender exclusions together with the program
 - Exclusions are set through Defender's WMI interface, no PowerShell or cmd
 - Needs administrator rights (UAC prompt)
+- Release now also contains Karanten-teljes-program.zip: exe, Help.txt, README, changelog and the full source

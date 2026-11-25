@@ -15,10 +15,18 @@ jobs:
           dotnet-version: 8.0.x
       - name: Publish
         run: dotnet publish Karanten.csproj -c Release -o out
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path pkg/src -Force | Out-Null
+          Copy-Item out/Karanten.exe pkg/
+          Copy-Item Help.txt, README.md, CHANGELOG.md, Karanten.csproj, app.manifest pkg/
+          Copy-Item src/Program.cs pkg/src/
+          Compress-Archive -Path pkg/* -DestinationPath Karanten-teljes-program.zip -Force
       - name: Release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete latest --yes --cleanup-tag || true
-          gh release create latest out/Karanten.exe --title "Karanten.exe" --notes-file CHANGELOG.md
+          gh release create latest out/Karanten.exe Karanten-teljes-program.zip --title "Karanten.exe" --notes-file CHANGELOG.md
