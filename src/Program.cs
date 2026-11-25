@@ -7,6 +7,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Globalization;
 using System.IO;
+using System.Management;
 using System.Security.Principal;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -19,6 +20,9 @@ namespace Karanten
         [STAThread]
         static void Main()
         {
+#if NET5_0_OR_GREATER
+            Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+#endif
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
 
@@ -183,22 +187,39 @@ namespace Karanten
             return sb.ToString();
         }
 
-        // Add-MpPreference -ExclusionPath. Null = siker, különben a hibaüzenet.
+        // Defender WMI: root\Microsoft\Windows\Defender, MSFT_MpPreference.Add(ExclusionPath[], ..., Force).
+        // Null = siker, különben a hibaüzenet.
         static string AddExclusion(string path)
         {
             try
             {
-                string ps = Path.Combine(Environment.SystemDirectory, @"WindowsPowerShell\v1.0\powershell.exe");
-                string cmd = "Add-MpPreference -ExclusionPath '" + path.Replace("'", "''") + "'";
-                ProcResult r = Proc.Run(ps, "-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command " + Proc.Quote(cmd));
-                if (r.Code == 0) return null;
-                string o = r.Output.Trim();
-                return o.Length == 0 ? ("kilépési kód: " + r.Code) : o;
+                ManagementClass mc = new ManagementClass(@"root\Microsoft\Windows\Defender", "MSFT_MpPreference", null);
+                ManagementBaseObject inParams = mc.GetMethodParameters("Add");
+                inParams["ExclusionPath"] = new string[] { path };
+                inParams["Force"] = true;
+                mc.InvokeMethod("Add", inParams, null);
+                return IsExcluded(path) ? null : "a Defender nem fogadta el (Tamper Protection?)";
             }
             catch (Exception ex)
             {
                 return ex.Message;
             }
+        }
+
+        static bool IsExcluded(string path)
+        {
+            using (ManagementObjectSearcher s = new ManagementObjectSearcher(
+                @"root\Microsoft\Windows\Defender", "SELECT ExclusionPath FROM MSFT_MpPreference"))
+            {
+                foreach (ManagementBaseObject o in s.Get())
+                {
+                    string[] arr = o["ExclusionPath"] as string[];
+                    if (arr == null) continue;
+                    foreach (string e in arr)
+                        if (string.Equals(e, path, StringComparison.OrdinalIgnoreCase)) return true;
+                }
+            }
+            return false;
         }
     }
 

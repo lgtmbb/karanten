@@ -1,13 +1,14 @@
 # karanten
 
-Grafikus, NVDA-val használható Windows program a Microsoft Defender karanténjának kezelésére.
+Grafikus, NVDA-val használható Windows program a Microsoft Defender karanténjának kezelésére. .NET 8, Windows Forms.
 
-- Listában mutatja a karanténban lévő fájlokat: fájlnév, eredeti hely, vírus/fenyegetés neve, időpont
-- Visszaállítás a felhasználói mappában lévő `karanten` mappába (`MpCmdRun -Restore -FilePath ... -Path ...`)
-- Részletek (Enter vagy Részletek gomb): melyik vírus, honnan
-- Induláskor ellenőrzi a `karanten` és `karanten2` mappát a felhasználói mappában: ha megvannak, nem csinál semmit; ha hiányzik, létrehozza, és a mappát meg a programot felveszi a Defender kivételei közé (`Add-MpPreference -ExclusionPath`)
+- Lista: fájlnév, eredeti hely, vírus/fenyegetés neve, időpont
+- Visszaállítás a felhasználói mappában lévő `karanten` mappába
+- Részletek: Enter vagy Részletek gomb
+- Induláskor ellenőrzi a `karanten` és `karanten2` mappát: ha megvannak, nem csinál semmit; ha hiányzik, létrehozza, és a mappát meg a programot felveszi a Defender kivételei közé (WMI: `MSFT_MpPreference.Add`)
 - `karanten2` üres marad
+- Rendszergazdai jog kell, a program UAC-t kér
 
-Rendszergazdai jog kell; a program magát újraindítja emelt joggal (UAC).
+A kész `Karanten.exe` a GitHub Releases oldalon van (latest), a GitHub Actions építi minden push után. Nincs szükség parancssorra vagy fordítóra.
 
-Fordítás: `build.bat` (csak a Windows saját .NET Framework fordítója kell). A kész `Karanten.exe` a `release` mappában is megtalálható.
+A karantén listázására és visszaállítására a Microsoft nem ad WMI/COM felületet; ezt a program a Defender saját MpCmdRun.exe-jével végzi háttérben, rejtett ablakkal.
