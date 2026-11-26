@@ -12,10 +12,10 @@ Escape: kilépés a főablakból; a súgó és a részletek ablakot bezárja.
 Alt + a gombok aláhúzott betűje: a gomb közvetlen elérése.
 
 A lista
-Négy oszlopa van: fájlnév, eredeti hely, vírus / fenyegetés neve, karanténba helyezés ideje. Egyszerre több elem is kijelölhető.
+Öt oszlopa van: fájlnév, eredeti hely, vírus / fenyegetés neve, karanténba helyezés ideje, forrás. A forrás karantén (a Defender karanténjából) vagy előzmény (a Defender védelmi előzményeiből, ahol a művelet karanténba helyezés volt). Egyszerre több elem is kijelölhető.
 
 Gombok, a lista mellett, Tab sorrendben
-Visszaállítás (Alt+V): a kijelölt elemeket a felhasználói mappában lévő karanten mappába állítja vissza. Előtte megerősítést kér. Utána újraolvassa a listát, és elemenként megmondja, sikerült-e.
+Visszaállítás (Alt+V): a kijelölt elemeket a felhasználói mappában lévő karanten mappába állítja vissza. Előtte megerősítést kér. Elemenként három módszert próbál (útvonal alapján, név és útvonal alapján, végül a fenyegetés neve alapján), és akkor tekinti sikeresnek, ha új fájl jelent meg a karanten mappában. Az eredmény külön olvasható ablakban jelenik meg, benne a Defender teljes kimenetével. A Defender a -Path használatakor az elemet a karanténban is megtartja.
 Részletek (Alt+R): külön ablakban, olvasható szövegmezőben mutatja a fájlnevet, az eredeti helyet, a teljes útvonalat, a vírus nevét és típusát, a Defender szerinti kategóriát és súlyosságot, hogy aktív-e, lefutott-e a fájl, és mikor került karanténba. Az ablakot a Bezárás gomb vagy az Escape zárja be.
 Frissítés (Alt+F): újraolvassa a karantén tartalmát.
 Nyers kimenet (Alt+N): megmutatja a Defender listázó parancsának változtatás nélküli kimenetét. Ha a lista üres, de a karanténban van fájl, itt látszik, mit adott vissza a Defender.
