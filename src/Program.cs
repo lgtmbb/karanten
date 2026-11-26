@@ -265,6 +265,9 @@ namespace Karanten
         public string Path = "";
         public string Time = "";
         public string Source = "quarantine";
+        public string Action = "";
+        public string Success = "";
+        public bool IsQuarantineAction;
 
         public string FileName { get { return System.IO.Path.GetFileName(Path); } }
         public string Dir
@@ -357,12 +360,11 @@ namespace Karanten
                         names[Convert.ToInt64(o["ThreatID"])] = Convert.ToString(o["ThreatName"]);
                 }
                 using (ManagementObjectSearcher s = new ManagementObjectSearcher(
-                    @"root\Microsoft\Windows\Defender", "SELECT ThreatID, Resources, InitialDetectionTime, CleaningActionID FROM MSFT_MpThreatDetection"))
+                    @"root\Microsoft\Windows\Defender", "SELECT ThreatID, Resources, InitialDetectionTime, CleaningActionID, ActionSuccess FROM MSFT_MpThreatDetection"))
                 {
                     foreach (ManagementBaseObject o in s.Get())
                     {
                         int action = o["CleaningActionID"] == null ? 0 : Convert.ToInt32(o["CleaningActionID"]);
-                        if (action != 2) continue;
                         long id = Convert.ToInt64(o["ThreatID"]);
                         string name;
                         if (!names.TryGetValue(id, out name)) name = "ThreatID " + id;
@@ -382,6 +384,9 @@ namespace Karanten
                             it.Path = r.Substring(pm.Index);
                             it.Time = time;
                             it.Source = "history";
+                            it.Action = ActionName(action);
+                            it.IsQuarantineAction = action == 2;
+                            it.Success = (o["ActionSuccess"] != null && Convert.ToBoolean(o["ActionSuccess"])) ? "igen" : "nem";
                             list.Add(it);
                         }
                     }
@@ -389,6 +394,22 @@ namespace Karanten
             }
             catch (Exception ex) { note = "Védelmi előzmények (WMI) hiba: " + ex.Message; }
             return list;
+        }
+
+        // MSFT_MpThreatDetection.CleaningActionID értékei
+        static string ActionName(int id)
+        {
+            switch (id)
+            {
+                case 1: return "tisztítás";
+                case 2: return "karanténba helyezés";
+                case 3: return "törlés";
+                case 6: return "engedélyezés";
+                case 8: return "felhasználói döntés";
+                case 9: return "nincs művelet";
+                case 10: return "blokkolás";
+                default: return "azonosító: " + id;
+            }
         }
 
         public static void AddUnique(List<QItem> target, List<QItem> more)
@@ -464,7 +485,11 @@ namespace Karanten
     // ---------- Főablak ----------
     class MainForm : Form
     {
-        ListView list;
+        ListView listQ, listH;
+        TabControl tabs;
+        List<QItem> qItems = new List<QItem>();
+        List<QItem> hItems = new List<QItem>();
+        ListView list { get { return tabs.SelectedIndex == 1 ? listH : listQ; } }
         TextBox status;
         Button btnRestore, btnDetails, btnRefresh, btnRaw, btnOpen, btnHelp, btnExit;
         string startupReport = "";
@@ -498,26 +523,24 @@ namespace Karanten
             Controls.Add(t);
 
             Label l1 = new Label();
-            l1.Text = "&Karanténban lévő fájlok:";
+            l1.Text = "Fájlok (a fülek között Ctrl+Tab vagy Ctrl+1, Ctrl+2 vált):";
             l1.AutoSize = true;
             l1.TabIndex = 0;
             l1.Margin = new Padding(0, 0, 0, 4);
 
-            list = new ListView();
-            list.View = View.Details;
-            list.FullRowSelect = true;
-            list.MultiSelect = true;
-            list.HideSelection = false;
-            list.Dock = DockStyle.Fill;
-            list.TabIndex = 1;
-            list.AccessibleName = "Karanténban lévő fájlok";
-            list.Columns.Add("Fájlnév", 180);
-            list.Columns.Add("Eredeti hely", 340);
-            list.Columns.Add("Vírus / fenyegetés", 200);
-            list.Columns.Add("Karanténba helyezve", 150);
-            list.Columns.Add("Forrás", 90);
-            list.ItemActivate += delegate { ShowDetails(); };
-            list.SelectedIndexChanged += delegate { UpdateButtons(); };
+            tabs = new TabControl();
+            tabs.Dock = DockStyle.Fill;
+            tabs.TabIndex = 1;
+            tabs.AccessibleName = "Fülek";
+            TabPage pageQ = new TabPage("Karantén");
+            TabPage pageH = new TabPage("Előzmények");
+            listQ = MakeList(false);
+            listH = MakeList(true);
+            pageQ.Controls.Add(listQ);
+            pageH.Controls.Add(listH);
+            tabs.TabPages.Add(pageQ);
+            tabs.TabPages.Add(pageH);
+            tabs.SelectedIndexChanged += delegate { UpdateButtons(); };
 
             // A gombok a lista mellett, jobbra; Tab-bal a listából egyenként elérhetők.
             FlowLayoutPanel buttons = new FlowLayoutPanel();
@@ -555,7 +578,7 @@ namespace Karanten
 
             t.Controls.Add(l1, 0, 0);
             t.SetColumnSpan(l1, 2);
-            t.Controls.Add(list, 0, 1);
+            t.Controls.Add(tabs, 0, 1);
             t.Controls.Add(buttons, 1, 1);
             t.Controls.Add(l2, 0, 2);
             t.SetColumnSpan(l2, 2);
@@ -565,8 +588,38 @@ namespace Karanten
             AcceptButton = null;
             CancelButton = btnExit;
             KeyPreview = true;
-            KeyDown += delegate(object sender, KeyEventArgs e) { if (e.KeyCode == Keys.F1) { e.Handled = true; ShowHelp(); } };
+            KeyDown += delegate(object sender, KeyEventArgs e) { if (e.KeyCode == Keys.F1) { e.Handled = true; ShowHelp(); }
+                else if (e.Control && e.KeyCode == Keys.D1) { e.Handled = true; tabs.SelectedIndex = 0; listQ.Focus(); }
+                else if (e.Control && e.KeyCode == Keys.D2) { e.Handled = true; tabs.SelectedIndex = 1; listH.Focus(); } };
             Shown += delegate { OnFirstShown(); };
+        }
+
+        ListView MakeList(bool history)
+        {
+            ListView lv = new ListView();
+            lv.View = View.Details;
+            lv.FullRowSelect = true;
+            lv.MultiSelect = true;
+            lv.HideSelection = false;
+            lv.Dock = DockStyle.Fill;
+            lv.TabIndex = 0;
+            lv.AccessibleName = history ? "Előzmények listája" : "Karanténban lévő fájlok";
+            lv.Columns.Add("Fájlnév", 170);
+            lv.Columns.Add("Eredeti hely", 320);
+            lv.Columns.Add("Vírus / fenyegetés", 190);
+            if (history)
+            {
+                lv.Columns.Add("Észlelés ideje", 140);
+                lv.Columns.Add("Művelet", 130);
+                lv.Columns.Add("Sikeres", 70);
+            }
+            else
+            {
+                lv.Columns.Add("Karanténba helyezve", 160);
+            }
+            lv.ItemActivate += delegate { ShowDetails(); };
+            lv.SelectedIndexChanged += delegate { UpdateButtons(); };
+            return lv;
         }
 
         Button MakeButton(string text, int tab, EventHandler click)
@@ -621,11 +674,17 @@ namespace Karanten
         void UpdateButtons()
         {
             bool any = list.SelectedItems.Count > 0;
-            btnRestore.Enabled = any;
+            bool canRestore = any;
+            if (any && tabs.SelectedIndex == 1)
+            {
+                foreach (ListViewItem li in list.SelectedItems)
+                    if (!((QItem)li.Tag).IsQuarantineAction) { canRestore = false; break; }
+            }
+            btnRestore.Enabled = canRestore;
             btnDetails.Enabled = any;
         }
 
-        List<QItem> LoadItems()
+        void LoadItems()
         {
             StringBuilder raw = new StringBuilder();
             List<QItem> items = new List<QItem>();
@@ -662,29 +721,40 @@ namespace Karanten
             }
             string note;
             List<QItem> hist = Quarantine.FromHistory(out note);
-            raw.AppendLine("== Védelmi előzmények (WMI), karanténba helyezettek ==");
+            raw.AppendLine("== Védelmi előzmények (WMI) ==");
             raw.AppendLine(note.Length > 0 ? note : (hist.Count + " találat"));
-            Quarantine.AddUnique(items, hist);
+            hist.Sort(delegate(QItem x, QItem y) { return string.CompareOrdinal(y.Time, x.Time); });
+            qItems = items;
+            hItems = hist;
             lastRaw = raw.ToString();
-            return items;
         }
 
-        void Fill(List<QItem> items)
+        void FillList(ListView lv, List<QItem> items, bool history)
         {
-            list.BeginUpdate();
-            list.Items.Clear();
+            lv.BeginUpdate();
+            lv.Items.Clear();
             foreach (QItem it in items)
             {
-                ListViewItem li = new ListViewItem(new string[] { it.FileName, it.Dir, it.Threat, it.Time, it.Source == "history" ? "előzmény" : "karantén" });
+                string[] cols = history
+                    ? new string[] { it.FileName, it.Dir, it.Threat, it.Time, it.Action, it.Success }
+                    : new string[] { it.FileName, it.Dir, it.Threat, it.Time };
+                ListViewItem li = new ListViewItem(cols);
                 li.Tag = it;
-                list.Items.Add(li);
+                lv.Items.Add(li);
             }
-            list.EndUpdate();
-            if (list.Items.Count > 0)
+            lv.EndUpdate();
+            if (lv.Items.Count > 0)
             {
-                list.Items[0].Selected = true;
-                list.Items[0].Focused = true;
+                lv.Items[0].Selected = true;
+                lv.Items[0].Focused = true;
             }
+        }
+
+        void ReloadAll()
+        {
+            LoadItems();
+            FillList(listQ, qItems, false);
+            FillList(listH, hItems, true);
             UpdateButtons();
         }
 
@@ -693,12 +763,14 @@ namespace Karanten
             Cursor = Cursors.WaitCursor;
             try
             {
-                List<QItem> items = LoadItems();
-                Fill(items);
+                ReloadAll();
                 string msg;
                 if (candidates.Count == 0) msg = lastRaw;
-                else if (items.Count == 0) msg = "Nincs karanténban lévő elem. A Nyers kimenet gomb megmutatja, mit adott vissza a Defender.\r\n" + FirstLines(lastRaw, 6);
-                else msg = items.Count + " elem a listában (karantén és védelmi előzmények együtt).";
+                else
+                {
+                    msg = "Karantén: " + qItems.Count + " elem. Előzmények: " + hItems.Count + " elem.";
+                    if (qItems.Count == 0) msg += "\r\nA karanténból nem jött elem. A Nyers kimenet gomb megmutatja, mit adott vissza a Defender.\r\n" + FirstLines(lastRaw, 6);
+                }
                 SetStatus(msg);
             }
             finally
@@ -716,14 +788,18 @@ namespace Karanten
 "\n" +
 "Billentyűk\n" +
 "F1: ez a súgó.\n" +
-"Tab / Shift+Tab: lépés a lista, a gombok és az állapot mező között.\n" +
+"Tab / Shift+Tab: lépés a fülek, a lista, a gombok és az állapot mező között.\n" +
+"Ctrl+1 / Ctrl+2: ugrás a Karantén illetve az Előzmények fülre.\n" +
 "Fel és Le nyíl: lépés a lista elemei között. Ctrl+Space vagy Shift+nyilak: több elem kijelölése.\n" +
 "Enter a listán: részletek.\n" +
 "Escape: kilépés a főablakból; a súgó és a részletek ablakot bezárja.\n" +
 "Alt + a gombok aláhúzott betűje: a gomb közvetlen elérése.\n" +
 "\n" +
 "A lista\n" +
-"Öt oszlopa van: fájlnév, eredeti hely, vírus / fenyegetés neve, karanténba helyezés ideje, forrás. A forrás karantén (a Defender karanténjából) vagy előzmény (a Defender védelmi előzményeiből, ahol a művelet karanténba helyezés volt). Egyszerre több elem is kijelölhető.\n" +
+"Két füle van. Váltás: Ctrl+Tab, a fül nevén a nyilak, vagy Ctrl+1 és Ctrl+2.\n" +
+"1. Karantén: a Defender karanténjában most is meglévő elemek. Oszlopok: fájlnév, eredeti hely, vírus / fenyegetés neve, karanténba helyezés ideje. Ezek állíthatók vissza.\n" +
+"2. Előzmények: a Defender védelmi előzményei, vagyis minden észlelés, a legfrissebb elöl. Oszlopok: fájlnév, eredeti hely, vírus / fenyegetés neve, észlelés ideje, művelet (például karanténba helyezés, törlés, engedélyezés), sikeres-e. Visszaállítás csak a karanténba helyezés műveletű elemekre elérhető; a többinél a gomb le van tiltva. A Részletek mindkét fülön működik.\n" +
+"Egyszerre több elem is kijelölhető.\n" +
 "\n" +
 "Gombok, a lista mellett, Tab sorrendben\n" +
 "Visszaállítás (Alt+V): a kijelölt elemeket a felhasználói mappában lévő karanten mappába állítja vissza. Előtte megerősítést kér. Elemenként három módszert próbál (útvonal alapján, név és útvonal alapján, végül a fenyegetés neve alapján), és akkor tekinti sikeresnek, ha új fájl jelent meg a karanten mappában. Az eredmény külön olvasható ablakban jelenik meg, benne a Defender teljes kimenetével. A Defender a -Path használatakor az elemet a karanténban is megtartja.\n" +
@@ -770,7 +846,18 @@ namespace Karanten
                 sb.AppendLine("Aktív: " + (ti.IsActive ? "igen" : "nem"));
                 sb.AppendLine("Lefutott a fájl: " + (ti.DidExecute ? "igen" : "nem"));
             }
-            sb.AppendLine("Karanténba helyezve: " + it.Time);
+            if (it.Source == "history")
+            {
+                sb.AppendLine("Észlelés ideje: " + it.Time);
+                sb.AppendLine("Művelet: " + it.Action);
+                sb.AppendLine("A művelet sikeres volt: " + it.Success);
+                sb.AppendLine("Forrás: védelmi előzmények");
+            }
+            else
+            {
+                sb.AppendLine("Karanténba helyezve: " + it.Time);
+                sb.AppendLine("Forrás: karantén");
+            }
             ShowText("Részletek - " + it.FileName, sb.ToString());
             list.Focus();
         }
@@ -802,7 +889,7 @@ namespace Karanten
                     if (restored) { ok++; sum.AppendLine("Visszaállítva: " + it.FileName); }
                     else sum.AppendLine("Sikertelen: " + it.FileName);
                 }
-                Fill(LoadItems());
+                ReloadAll();
             }
             finally
             {

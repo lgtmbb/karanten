@@ -5,14 +5,18 @@ A program a Microsoft Defender karanténjában lévő fájlokat listázza, megmu
 
 Billentyűk
 F1: ez a súgó.
-Tab / Shift+Tab: lépés a lista, a gombok és az állapot mező között.
+Tab / Shift+Tab: lépés a fülek, a lista, a gombok és az állapot mező között.
+Ctrl+1 / Ctrl+2: ugrás a Karantén illetve az Előzmények fülre.
 Fel és Le nyíl: lépés a lista elemei között. Ctrl+Space vagy Shift+nyilak: több elem kijelölése.
 Enter a listán: részletek.
 Escape: kilépés a főablakból; a súgó és a részletek ablakot bezárja.
 Alt + a gombok aláhúzott betűje: a gomb közvetlen elérése.
 
 A lista
-Öt oszlopa van: fájlnév, eredeti hely, vírus / fenyegetés neve, karanténba helyezés ideje, forrás. A forrás karantén (a Defender karanténjából) vagy előzmény (a Defender védelmi előzményeiből, ahol a művelet karanténba helyezés volt). Egyszerre több elem is kijelölhető.
+Két füle van. Váltás: Ctrl+Tab, a fül nevén a nyilak, vagy Ctrl+1 és Ctrl+2.
+1. Karantén: a Defender karanténjában most is meglévő elemek. Oszlopok: fájlnév, eredeti hely, vírus / fenyegetés neve, karanténba helyezés ideje. Ezek állíthatók vissza.
+2. Előzmények: a Defender védelmi előzményei, vagyis minden észlelés, a legfrissebb elöl. Oszlopok: fájlnév, eredeti hely, vírus / fenyegetés neve, észlelés ideje, művelet (például karanténba helyezés, törlés, engedélyezés), sikeres-e. Visszaállítás csak a karanténba helyezés műveletű elemekre elérhető; a többinél a gomb le van tiltva. A Részletek mindkét fülön működik.
+Egyszerre több elem is kijelölhető.
 
 Gombok, a lista mellett, Tab sorrendben
 Visszaállítás (Alt+V): a kijelölt elemeket a felhasználói mappában lévő karanten mappába állítja vissza. Előtte megerősítést kér. Elemenként három módszert próbál (útvonal alapján, név és útvonal alapján, végül a fenyegetés neve alapján), és akkor tekinti sikeresnek, ha új fájl jelent meg a karanten mappában. Az eredmény külön olvasható ablakban jelenik meg, benne a Defender teljes kimenetével. A Defender a -Path használatakor az elemet a karanténban is megtartja.
