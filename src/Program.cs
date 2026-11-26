@@ -674,13 +674,7 @@ namespace Karanten
         void UpdateButtons()
         {
             bool any = list.SelectedItems.Count > 0;
-            bool canRestore = any;
-            if (any && tabs.SelectedIndex == 1)
-            {
-                foreach (ListViewItem li in list.SelectedItems)
-                    if (!((QItem)li.Tag).IsQuarantineAction) { canRestore = false; break; }
-            }
-            btnRestore.Enabled = canRestore;
+            btnRestore.Enabled = any;
             btnDetails.Enabled = any;
         }
 
@@ -798,7 +792,7 @@ namespace Karanten
 "A lista\n" +
 "Két füle van. Váltás: Ctrl+Tab, a fül nevén a nyilak, vagy Ctrl+1 és Ctrl+2.\n" +
 "1. Karantén: a Defender karanténjában most is meglévő elemek. Oszlopok: fájlnév, eredeti hely, vírus / fenyegetés neve, karanténba helyezés ideje. Ezek állíthatók vissza.\n" +
-"2. Előzmények: a Defender védelmi előzményei, vagyis minden észlelés, a legfrissebb elöl. Oszlopok: fájlnév, eredeti hely, vírus / fenyegetés neve, észlelés ideje, művelet (például karanténba helyezés, törlés, engedélyezés), sikeres-e. Visszaállítás csak a karanténba helyezés műveletű elemekre elérhető; a többinél a gomb le van tiltva. A Részletek mindkét fülön működik.\n" +
+"2. Előzmények: a Defender védelmi előzményei, vagyis minden észlelés, a legfrissebb elöl. Oszlopok: fájlnév, eredeti hely, vírus / fenyegetés neve, észlelés ideje, művelet (például karanténba helyezés, törlés, engedélyezés), sikeres-e. A Visszaállítás ezen a fülön is működik: a program megkeresi a bejegyzéshez tartozó, még meglévő karantén elemet, és azt állítja vissza. Ha a Defender már nem őriz másolatot (például a művelet törlés volt, vagy az elemet már eltávolították a karanténból), a program ezt megmondja, és nem próbálkozik hiába. A Részletek mindkét fülön működik. A Windows Biztonság az előzményeket két hétig őrzi.\n" +
 "Egyszerre több elem is kijelölhető.\n" +
 "\n" +
 "Gombok, a lista mellett, Tab sorrendben\n" +
@@ -885,8 +879,23 @@ namespace Karanten
             {
                 foreach (QItem it in chosen)
                 {
-                    bool restored = TryRestore(it, dest, log);
+                    QItem target = it;
+                    if (it.Source == "history")
+                    {
+                        QItem q = FindInQuarantine(it);
+                        if (q != null) target = q;
+                        else if (!it.IsQuarantineAction)
+                        {
+                            string why = "a művelet (" + it.Action + ") után a Defender nem őriz másolatot, nincs mit visszaállítani";
+                            sum.AppendLine("Nem állítható vissza: " + it.FileName + " - " + why);
+                            log.AppendLine("> " + it.FileName + ": " + why);
+                            continue;
+                        }
+                    }
+                    bool restored = TryRestore(target, dest, log);
                     if (restored) { ok++; sum.AppendLine("Visszaállítva: " + it.FileName); }
+                    else if (it.Source == "history" && target == it)
+                        sum.AppendLine("Sikertelen: " + it.FileName + " - az elem már nincs a karanténban (az előzmény csak a régi eseményt őrzi)");
                     else sum.AppendLine("Sikertelen: " + it.FileName);
                 }
                 ReloadAll();
@@ -900,6 +909,17 @@ namespace Karanten
             SetStatus(ok + " / " + chosen.Count + " elem visszaállítva ide: " + dest);
             ShowText("Visszaállítás eredménye", result);
             list.Focus();
+        }
+
+        // Az előzmény-bejegyzéshez tartozó, még meglévő karantén elem (útvonal, majd fájlnév + vírusnév alapján).
+        QItem FindInQuarantine(QItem h)
+        {
+            foreach (QItem q in qItems)
+                if (string.Equals(q.Path, h.Path, StringComparison.OrdinalIgnoreCase)) return q;
+            foreach (QItem q in qItems)
+                if (string.Equals(q.FileName, h.FileName, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(q.Threat, h.Threat, StringComparison.OrdinalIgnoreCase)) return q;
+            return null;
         }
 
         static Dictionary<string, long> Snapshot(string dir)

@@ -15,7 +15,7 @@ Alt + a gombok aláhúzott betűje: a gomb közvetlen elérése.
 A lista
 Két füle van. Váltás: Ctrl+Tab, a fül nevén a nyilak, vagy Ctrl+1 és Ctrl+2.
 1. Karantén: a Defender karanténjában most is meglévő elemek. Oszlopok: fájlnév, eredeti hely, vírus / fenyegetés neve, karanténba helyezés ideje. Ezek állíthatók vissza.
-2. Előzmények: a Defender védelmi előzményei, vagyis minden észlelés, a legfrissebb elöl. Oszlopok: fájlnév, eredeti hely, vírus / fenyegetés neve, észlelés ideje, művelet (például karanténba helyezés, törlés, engedélyezés), sikeres-e. Visszaállítás csak a karanténba helyezés műveletű elemekre elérhető; a többinél a gomb le van tiltva. A Részletek mindkét fülön működik.
+2. Előzmények: a Defender védelmi előzményei, vagyis minden észlelés, a legfrissebb elöl. Oszlopok: fájlnév, eredeti hely, vírus / fenyegetés neve, észlelés ideje, művelet (például karanténba helyezés, törlés, engedélyezés), sikeres-e. A Visszaállítás ezen a fülön is működik: a program megkeresi a bejegyzéshez tartozó, még meglévő karantén elemet, és azt állítja vissza. Ha a Defender már nem őriz másolatot (például a művelet törlés volt, vagy az elemet már eltávolították a karanténból), a program ezt megmondja, és nem próbálkozik hiába. A Részletek mindkét fülön működik. A Windows Biztonság az előzményeket két hétig őrzi.
 Egyszerre több elem is kijelölhető.
 
 Gombok, a lista mellett, Tab sorrendben

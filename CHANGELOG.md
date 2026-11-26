@@ -1,6 +1,7 @@
 # Karanten.exe changelog
 
 ## Latest
+- Restore works on the Előzmények tab too: the history entry is matched to its item still in quarantine and restored from there; if Defender keeps no copy (deleted, removed, allowed), the program says so instead of failing silently
 - Two tabs: Karantén (items currently in Defender quarantine, restorable) and Előzmények (Defender protection history with action and success columns; restore only for quarantine actions). Ctrl+1 and Ctrl+2 switch tabs
 - Fix: restore now tries three MpCmdRun methods per item (by path, by name and path, by threat name) and checks that a new file really appeared in the karanten folder; the full Defender output is shown in a readable window
 - Fix: the list shows the full range: parser keeps every item under a threat (also NT-style paths), reads the -Output file (UTF-8) as a second source, and adds quarantined entries from Defender protection history; new Forrás column
